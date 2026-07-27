@@ -9,6 +9,10 @@ jobs:
   checkin:
     runs-on: ubuntu-latest
     
+    # 赋予提交回仓库的写入权限
+    permissions:
+      contents: write
+    
     steps:
     - name: Checkout code
       uses: actions/checkout@v5
@@ -30,14 +34,10 @@ jobs:
         IKUUU_COOKIE_1: ${{ secrets.IKUUU_COOKIE_1 }}
         IKUUU_COOKIE_2: ${{ secrets.IKUUU_COOKIE_2 }}
     
-    - name: Save results
-      run: |
-        echo "$(date): 签到完成" >> checkin_history.txt
-    
     - name: Commit results
       run: |
         git config --local user.email "action@github.com"
         git config --local user.name "GitHub Action"
-        git add checkin_history.txt
-        git commit -m "Update checkin history" || exit 0
+        git add checkin_result.txt
+        git commit -m "Update checkin detailed logs" || exit 0
         git push
