@@ -2,14 +2,14 @@ name: Daily Check-in2
 
 on:
   schedule:
-    - cron: '30 16 * * *'
+    # 北京时间 01:00 (即 UTC 时间前一天 17:00)
+    - cron: '0 17 * * *'
   workflow_dispatch:
 
 jobs:
   checkin:
     runs-on: ubuntu-latest
     
-    # 赋予提交回仓库的写入权限
     permissions:
       contents: write
     
@@ -26,9 +26,19 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install requests beautifulsoup4
+
+    # ------------------ 新增：随机延迟步骤 ------------------
+    - name: Delay randomly
+      # 如果是手动触发 (workflow_dispatch)，不等待直接执行；如果是定时任务，则随机等待 1~1800 秒（30分钟内）
+      if: github.event_name == 'schedule'
+      run: |
+        DELAY=$((RANDOM % 7200 + 1))
+        echo "⏰ 为模拟真实行为，随机等待 $DELAY 秒后开始签到..."
+        sleep $DELAY
+    # --------------------------------------------------------
     
     - name: Run check-in script
-      run: python ./main_2.py
+      run: python ./main.py
       env:
         TZ: 'Asia/Shanghai'
         IKUUU_COOKIE_1: ${{ secrets.IKUUU_COOKIE_1 }}
