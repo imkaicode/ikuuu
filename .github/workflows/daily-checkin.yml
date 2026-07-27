@@ -30,5 +30,19 @@ jobs:
       run: python ./main.py
       env:
         TZ: 'Asia/Shanghai'
-        IKUUU_EMAIL: ${{ secrets.IKUUU_EMAIL }}
-        IKUUU_PASSWORD: ${{ secrets.IKUUU_PASSWORD }}
+        IKUUU_EMAIL_1: ${{ secrets.IKUUU_EMAIL_1 }}
+        IKUUU_PASSWORD_1: ${{ secrets.IKUUU_PASSWORD_1 }}
+        IKUUU_EMAIL_2: ${{ secrets.IKUUU_EMAIL_2 }}
+        IKUUU_PASSWORD_2: ${{ secrets.IKUUU_PASSWORD_2 }}
+    
+    - name: Save results
+      run: |
+        echo "$(date): 签到完成" >> checkin_history.txt
+    
+    - name: Commit results
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+        git add checkin_history.txt
+        git commit -m "Update checkin history" || exit 0
+        git push
