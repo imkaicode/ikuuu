@@ -38,7 +38,7 @@ jobs:
     # --------------------------------------------------------
     
     - name: Run check-in script
-      run: python ./main.py
+      run: python ./main_2.py
       env:
         TZ: 'Asia/Shanghai'
         IKUUU_COOKIE_1: ${{ secrets.IKUUU_COOKIE_1 }}
