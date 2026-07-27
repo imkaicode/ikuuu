@@ -3,6 +3,7 @@ from bs4 import BeautifulSoup
 import re
 import os
 from datetime import datetime
+from urllib.parse import urlparse
 
 def print_with_time(message):
     """带时间戳的打印"""
@@ -16,77 +17,100 @@ def login_and_get_cookie():
     
     if not email or not password:
         print_with_time("❌ 错误: 请设置 IKUUU_EMAIL 和 IKUUU_PASSWORD 环境变量")
-        return None
+        return None, None
     
     print_with_time(f"🔑 正在使用账号 {email[:3]}***{email.split('@')[1]} 登录...")
     
     session = requests.Session()
     
-    # 首先访问登录页面获取必要的信息
-    login_page_url = "https://ikuuu.de/auth/login"
+    # 可用的登录 URL 列表
+    url_list = [
+        "https://ikuuu.fyi/auth/login",
+        "https://ikuuu.win/auth/login",
+        "https://ikuuu.de/auth/login"
+    ]
+    
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0'
     }
     
-    try:
-        # 获取登录页面
-        response = session.get(login_page_url, headers=headers)
-        soup = BeautifulSoup(response.text, 'html.parser')
+    # 遍历尝试每一个 URL
+    for login_page_url in url_list:
+        parsed_url = urlparse(login_page_url)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"  # 动态提取主域名 (如 https://ikuuu.fyi)
         
-        # 查找 CSRF token
-        csrf_token = None
-        csrf_input = soup.find('input', {'name': '_token'})
-        if csrf_input:
-            csrf_token = csrf_input.get('value')
-        
-        # 准备登录数据
-        login_data = {
-            'email': email,
-            'passwd': password
-        }
-        
-        if csrf_token:
-            login_data['_token'] = csrf_token
-        
-        # 发送登录请求
-        login_url = "https://ikuuu.de/auth/login"
-        headers.update({
-            'Origin': 'https://ikuuu.de',
-            'Referer': 'https://ikuuu.de/auth/login',
-            'Content-Type': 'application/x-www-form-urlencoded'
-        })
-        
-        response = session.post(login_url, data=login_data, headers=headers)
-        
-        # 检查登录是否成功
-        if response.status_code == 200:
-            # 检查响应内容判断登录状态
-            if 'user' in response.url or response.json().get('ret') == 1:
-                print_with_time("✅ 登录成功")
-                # 提取 Cookie
-                cookies = session.cookies.get_dict()
-                cookie_string = '; '.join([f"{name}={value}" for name, value in cookies.items()])
-                return cookie_string
-            else:
-                result = response.json()
-                print_with_time(f"❌ 登录失败: {result.get('msg', '未知错误')}")
-                return None
-        else:
-            print_with_time(f"❌ 登录请求失败，状态码: {response.status_code}")
-            return None
+        try:
+            print_with_time(f"🌐 尝试访问: {login_page_url}")
             
-    except Exception as e:
-        print_with_time(f"❌ 登录过程中发生错误: {str(e)}")
-        return None
+            # 获取登录页面
+            response = session.get(login_page_url, headers=headers, timeout=10)
+            if response.status_code != 200:
+                print_with_time(f"⚠️ 无法访问页面，状态码: {response.status_code}")
+                continue
 
-def checkin(cookie):
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # 查找 CSRF token
+            csrf_token = None
+            csrf_input = soup.find('input', {'name': '_token'})
+            if csrf_input:
+                csrf_token = csrf_input.get('value')
+            
+            # 准备登录数据
+            login_data = {
+                'email': email,
+                'passwd': password
+            }
+            
+            if csrf_token:
+                login_data['_token'] = csrf_token
+            
+            # 动态设置与当前域名匹配的请求头
+            req_headers = headers.copy()
+            req_headers.update({
+                'Origin': base_url,
+                'Referer': login_page_url,
+                'Content-Type': 'application/x-www-form-urlencoded'
+            })
+            
+            # 发送登录请求 (使用当前尝试的 URL)
+            response = session.post(login_page_url, data=login_data, headers=req_headers, timeout=10)
+            
+            # 检查登录是否成功
+            if response.status_code == 200:
+                try:
+                    res_json = response.json()
+                    is_success = 'user' in response.url or res_json.get('ret') == 1
+                    msg = res_json.get('msg', '未知错误')
+                except Exception:
+                    is_success = 'user' in response.url
+                    msg = "非 JSON 格式响应"
+
+                if is_success:
+                    print_with_time(f"✅ 登录成功 (通过域名: {base_url})")
+                    # 提取 Cookie
+                    cookies = session.cookies.get_dict()
+                    cookie_string = '; '.join([f"{name}={value}" for name, value in cookies.items()])
+                    return cookie_string, base_url
+                else:
+                    print_with_time(f"❌ 登录失败: {msg}")
+            else:
+                print_with_time(f"❌ 登录请求失败，状态码: {response.status_code}")
+                
+        except Exception as e:
+            print_with_time(f"❌ 登录过程中发生错误: {str(e)}")
+    
+    # 全部尝试后均失败
+    return None, None
+
+def checkin(cookie, base_url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0',
-        'Origin': 'https://ikuuu.de',
-        'Referer': 'https://ikuuu.de/user',
+        'Origin': base_url,
+        'Referer': f"{base_url}/user",
         'Cookie': cookie
     }
-    url = "https://ikuuu.de/user/checkin"
+    url = f"{base_url}/user/checkin"
     
     try:
         response = requests.post(url, headers=headers)
@@ -105,14 +129,14 @@ def checkin(cookie):
         print_with_time(f"❌ 签到请求失败: {str(e)}")
         return False
 
-def get_user_traffic(cookie):
+def get_user_traffic(cookie, base_url):
     headers = {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36 Edg/138.0.0.0',
-        'Origin': 'https://ikuuu.de',
-        'Referer': 'https://ikuuu.de/user/code',
+        'Origin': base_url,
+        'Referer': f"{base_url}/user/code",
         'Cookie': cookie
     }
-    url = "https://ikuuu.de/user"
+    url = f"{base_url}/user"
     
     try:
         response = requests.get(url, headers=headers)
@@ -156,18 +180,18 @@ if __name__ == "__main__":
     print_with_time("🚀 iKuuu 自动签到程序启动")
     print("=" * 60)
     
-    # 登录获取 Cookie
-    cookie_data = login_and_get_cookie()
+    # 登录获取 Cookie 以及可用主域名
+    cookie_data, base_url = login_and_get_cookie()
     
-    if not cookie_data:
+    if not cookie_data or not base_url:
         print_with_time("❌ 程序终止")
         exit(1)
     
     # 执行签到
-    checkin(cookie_data)
+    checkin(cookie_data, base_url)
     
     # 获取流量信息
-    get_user_traffic(cookie_data)
+    get_user_traffic(cookie_data, base_url)
     
     print("=" * 60)
     print_with_time("✨ 程序执行完成")
