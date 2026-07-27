@@ -10,16 +10,13 @@ def print_with_time(message):
     current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     print(f"[{current_time}] {message}")
 
-def login_and_get_cookie():
+def login_and_get_cookie(email, password):
     """登录 SSPanel 并获取 Cookie"""
-    email = os.getenv('IKUUU_EMAIL')
-    password = os.getenv('IKUUU_PASSWORD')
-    
     if not email or not password:
-        print_with_time("❌ 错误: 请设置 IKUUU_EMAIL 和 IKUUU_PASSWORD 环境变量")
+        print_with_time("❌ 错误: 邮箱或密码为空")
         return None, None
     
-    print_with_time(f"🔑 正在使用账号 {email[:3]}***{email.split('@')[1]} 登录...")
+    print_with_time(f"🔑 正在使用账号 {email[:3]}***{email.split('@')[1] if '@' in email else ''} 登录...")
     
     session = requests.Session()
     
@@ -37,7 +34,7 @@ def login_and_get_cookie():
     # 遍历尝试每一个 URL
     for login_page_url in url_list:
         parsed_url = urlparse(login_page_url)
-        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"  # 动态提取主域名 (如 https://ikuuu.fyi)
+        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"  # 动态提取主域名
         
         try:
             print_with_time(f"🌐 尝试访问: {login_page_url}")
@@ -146,22 +143,19 @@ def get_user_traffic(cookie, base_url):
         traffic_cards = soup.find_all('div', class_='card-statistic-2')
         
         print_with_time("📊 流量使用情况:")
-        print("=" * 50)
+        print("-" * 40)
         
         for card in traffic_cards:
             header = card.find('h4')
             if header and '剩余流量' in header.text:
-                # 提取剩余流量数值
                 body = card.find('div', class_='card-body')
                 if body:
                     remaining_traffic = re.sub(r'\s+', ' ', body.get_text(strip=True))
                     print(f"📈 剩余流量: {remaining_traffic}")
                 
-                # 提取今日已用流量
                 stats = card.find('div', class_='card-stats-title')
                 if stats:
                     today_used_text = re.sub(r'\s+', ' ', stats.get_text(strip=True))
-                    # 提取冒号后的数值部分
                     match = re.search(r':\s*(.+)', today_used_text)
                     if match:
                         today_used = match.group(1).strip()
@@ -169,7 +163,7 @@ def get_user_traffic(cookie, base_url):
                     else:
                         print(f"📊 今日使用情况: {today_used_text}")
         
-        print("=" * 50)
+        print("-" * 40)
         return soup
     except Exception as e:
         print_with_time(f"❌ 获取流量信息失败: {str(e)}")
@@ -180,19 +174,50 @@ if __name__ == "__main__":
     print_with_time("🚀 iKuuu 自动签到程序启动")
     print("=" * 60)
     
-    # 登录获取 Cookie 以及可用主域名
-    cookie_data, base_url = login_and_get_cookie()
+    # 自动获取所有以 IKUUU_EMAIL_ 开头的环境变量账号
+    accounts = []
     
-    if not cookie_data or not base_url:
-        print_with_time("❌ 程序终止")
+    # 兼容单账号 (IKUUU_EMAIL) 和多账号 (IKUUU_EMAIL_1, IKUUU_EMAIL_2 等)
+    single_email = os.getenv('IKUUU_EMAIL')
+    if single_email:
+        accounts.append((single_email, os.getenv('IKUUU_PASSWORD', '')))
+    
+    # 动态扫描环境变量中的多账号编号
+    idx = 1
+    while True:
+        email = os.getenv(f'IKUUU_EMAIL_{idx}')
+        password = os.getenv(f'IKUUU_PASSWORD_{idx}')
+        if not email:
+            break
+        accounts.append((email, password))
+        idx += 1
+
+    if not accounts:
+        print_with_time("❌ 未检测到任何登录环境变量！请检查 Secrets 配置。")
         exit(1)
-    
-    # 执行签到
-    checkin(cookie_data, base_url)
-    
-    # 获取流量信息
-    get_user_traffic(cookie_data, base_url)
-    
+
+    has_error = False
+
+    # 循环遍历每个账号执行签到
+    for idx, (email, password) in enumerate(accounts, 1):
+        print("\n" + "=" * 50)
+        print_with_time(f"👤 开始处理第 {idx} 个账号")
+        print("=" * 50)
+        
+        cookie_data, base_url = login_and_get_cookie(email, password)
+        
+        if cookie_data and base_url:
+            # 执行签到
+            checkin(cookie_data, base_url)
+            # 获取流量
+            get_user_traffic(cookie_data, base_url)
+        else:
+            print_with_time(f"❌ 账号 {email} 处理失败")
+            has_error = True
+
+    print("\n" + "=" * 60)
+    print_with_time("✨ 所有账号处理完成")
     print("=" * 60)
-    print_with_time("✨ 程序执行完成")
-    print("=" * 60)
+    
+    if has_error:
+        exit(1)
