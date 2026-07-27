@@ -1,11 +1,8 @@
 name: Daily Check-in
 
 on:
-  # 定时触发
   schedule:
     - cron: '30 16 * * *'
-  
-  # 允许手动触发
   workflow_dispatch:
 
 jobs:
@@ -14,10 +11,10 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v5
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.x'
     
