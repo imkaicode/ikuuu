@@ -82,31 +82,36 @@ def checkin_and_get_traffic(cookie):
         print_with_time("❌ 所有域名访问失败，请检查 Cookie 是否已过期。")
         return False
 
-    # 2. 获取流量详情并写入文件
+    # 2. 获取流量详情并写入文件 (改用 CSS 选择器解析 SVG 节点)
     try:
         user_url = f"{working_url}/user"
         res = session.get(user_url, headers=headers, timeout=10)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        traffic_cards = soup.find_all('div', class_='card-statistic-2')
         print_with_time("📊 账号流量使用详情:")
         
-        for card in traffic_cards:
-            header = card.find('h4')
-            if header and '剩余流量' in header.text:
-                body = card.find('div', class_='card-body')
-                if body:
-                    remaining_traffic = re.sub(r'\s+', ' ', body.get_text(strip=True))
-                    print_with_time(f"   📈 剩余流量: {remaining_traffic}")
-                
-                stats = card.find('div', class_='card-stats-title')
-                if stats:
-                    today_used_text = re.sub(r'\s+', ' ', stats.get_text(strip=True))
-                    match = re.search(r':\s*(.+)', today_used_text)
-                    if match:
-                        print_with_time(f"   📊 今日已用: {match.group(1).strip()}")
-                    else:
-                        print_with_time(f"   📊 今日已用: {today_used_text}")
+        # 使用 CSS 模糊选择器匹配类名包含 c3-legend-item 的 <g> 节点下的 <text>
+        legend_texts = [
+            elem.get_text(strip=True) 
+            for elem in soup.select("#pie-chart g[class*='c3-legend-item'] > text")
+        ]
+        
+        if legend_texts:
+            for item in legend_texts:
+                print_with_time(f"   📈 {item}")
+        else:
+            # 降级备用方案：按 class 前缀分类精确提取
+            used = soup.select_one("g[class*='c3-legend-item-已用-'] > text")
+            today = soup.select_one("g[class*='c3-legend-item-今日已用'] > text")
+            usable = soup.select_one("g[class*='c3-legend-item-可用'] > text")
+            
+            if used:
+                print_with_time(f"   📈 已用流量: {used.get_text(strip=True)}")
+            if today:
+                print_with_time(f"   📊 今日已用: {today.get_text(strip=True)}")
+            if usable:
+                print_with_time(f"   📉 可用流量: {usable.get_text(strip=True)}")
+
     except Exception as e:
         print_with_time(f"❌ 获取流量信息失败: {str(e)}")
 
