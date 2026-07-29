@@ -90,29 +90,35 @@ def checkin_and_get_traffic(cookie):
         
         print_with_time("📊 账号流量使用详情:")
         
-        # 方案 A：从页面渲染饼图的 JS 变量中用正则表达式直接提取（最可靠）
-        # SSPANEL 通常在 JS 中定义类似 ['已用', '7.14MB'], ['今日已用', '0B'], ['可用', '55.51GB']
-        js_matches = re.findall(r"\[\s*['\"]([^'\"]*?(?:已用|可用)[^'\"]*?)['\"]\s*,\s*['\"]([^'\"]+?)['\"]", html)
+        # 匹配 c3.js 传入的数据数组，例如 ['已用', 7.14, '7.14MB'] 或 ['今日已用', '0B'] 等
+        # SSPanel 常见的 C3 图表配置格式：['标签名', 数值/带单位字符串]
+        patterns = [
+            r"\[\s*['\"]([^'\"]*?(?:已用|可用|今日已用)[^'\"]*?)['\"]\s*,\s*['\"]?([\d\.]+\s*(?:[KMGT]?B))['\"]?",
+            r"['\"]?([^'\"]*?(?:已用|可用|今日已用)[^'\"]*?)['\"]?\s*:\s*['\"]?([\d\.]+\s*(?:[KMGT]?B))['\"]?"
+        ]
         
-        if js_matches:
-            for name, val in js_matches:
-                print_with_time(f"   📈 {name}: {val}")
-        else:
-            # 方案 B：解析静态文本卡片（部分节点面板备用）
-            soup = BeautifulSoup(html, 'html.parser')
-            cards = soup.find_all('div', class_='card-statistic-2')
-            found = False
-            
-            for card in cards:
-                text_content = card.get_text(separator=" ", strip=True)
-                if "流量" in text_content or "已用" in text_content:
-                    # 整理多余空格
-                    clean_text = re.sub(r'\s+', ' ', text_content)
-                    print_with_time(f"   📈 {clean_text}")
-                    found = True
-            
-            if not found:
-                print_with_time("⚠️ 未能在页面中找到流量数据，可能是网页结构变更或登录已失效。")
+        found_data = []
+        for pattern in patterns:
+            matches = re.findall(pattern, html, re.IGNORECASE)
+            if matches:
+                for label, val in matches:
+                    item = f"{label.strip()}: {val.strip()}"
+                    if item not in found_data:
+                        found_data.append(item)
+                        print_with_time(f"   📈 {item}")
+        
+        # 兜底方案：如果图表 JS 匹配不到，直接全局抓取包含 "已用" 或 "可用" 后跟流量单位的文本片段
+        if not found_data:
+            text_matches = re.findall(r"((?:今日已用|已用|可用)[^<>\n\r]{0,20}?[\d\.]+\s*(?:[KMGT]?B))", html)
+            if text_matches:
+                for match in text_matches:
+                    clean_match = re.sub(r'\s+', ' ', match).strip()
+                    if clean_match not in found_data:
+                        found_data.append(clean_match)
+                        print_with_time(f"   📈 {clean_match}")
+
+        if not found_data:
+            print_with_time("⚠️ 未能在页面中找到流量数据，可能是网页结构变更或登录已失效。")
 
     except Exception as e:
         print_with_time(f"❌ 获取流量信息失败: {str(e)}")
