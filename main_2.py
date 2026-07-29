@@ -81,7 +81,7 @@ def checkin_and_get_traffic(cookie):
     if not working_url:
         print_with_time("❌ 所有域名访问失败，请检查 Cookie 是否已过期。")
         return False
-
+    '''
     # 2. 获取流量详情并写入文件
     try:
         user_url = f"{working_url}/user"
@@ -122,7 +122,7 @@ def checkin_and_get_traffic(cookie):
 
     except Exception as e:
         print_with_time(f"❌ 获取流量信息失败: {str(e)}")
-
+    '''
     return True
 
 if __name__ == "__main__":
