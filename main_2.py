@@ -82,35 +82,37 @@ def checkin_and_get_traffic(cookie):
         print_with_time("❌ 所有域名访问失败，请检查 Cookie 是否已过期。")
         return False
 
-    # 2. 获取流量详情并写入文件 (改用 CSS 选择器解析 SVG 节点)
+    # 2. 获取流量详情并写入文件
     try:
         user_url = f"{working_url}/user"
         res = session.get(user_url, headers=headers, timeout=10)
-        soup = BeautifulSoup(res.text, 'html.parser')
+        html = res.text
         
         print_with_time("📊 账号流量使用详情:")
         
-        # 使用 CSS 模糊选择器匹配类名包含 c3-legend-item 的 <g> 节点下的 <text>
-        legend_texts = [
-            elem.get_text(strip=True) 
-            for elem in soup.select("#pie-chart g[class*='c3-legend-item'] > text")
-        ]
+        # 方案 A：从页面渲染饼图的 JS 变量中用正则表达式直接提取（最可靠）
+        # SSPANEL 通常在 JS 中定义类似 ['已用', '7.14MB'], ['今日已用', '0B'], ['可用', '55.51GB']
+        js_matches = re.findall(r"\[\s*['\"]([^'\"]*?(?:已用|可用)[^'\"]*?)['\"]\s*,\s*['\"]([^'\"]+?)['\"]", html)
         
-        if legend_texts:
-            for item in legend_texts:
-                print_with_time(f"   📈 {item}")
+        if js_matches:
+            for name, val in js_matches:
+                print_with_time(f"   📈 {name}: {val}")
         else:
-            # 降级备用方案：按 class 前缀分类精确提取
-            used = soup.select_one("g[class*='c3-legend-item-已用-'] > text")
-            today = soup.select_one("g[class*='c3-legend-item-今日已用'] > text")
-            usable = soup.select_one("g[class*='c3-legend-item-可用'] > text")
+            # 方案 B：解析静态文本卡片（部分节点面板备用）
+            soup = BeautifulSoup(html, 'html.parser')
+            cards = soup.find_all('div', class_='card-statistic-2')
+            found = False
             
-            if used:
-                print_with_time(f"   📈 已用流量: {used.get_text(strip=True)}")
-            if today:
-                print_with_time(f"   📊 今日已用: {today.get_text(strip=True)}")
-            if usable:
-                print_with_time(f"   📉 可用流量: {usable.get_text(strip=True)}")
+            for card in cards:
+                text_content = card.get_text(separator=" ", strip=True)
+                if "流量" in text_content or "已用" in text_content:
+                    # 整理多余空格
+                    clean_text = re.sub(r'\s+', ' ', text_content)
+                    print_with_time(f"   📈 {clean_text}")
+                    found = True
+            
+            if not found:
+                print_with_time("⚠️ 未能在页面中找到流量数据，可能是网页结构变更或登录已失效。")
 
     except Exception as e:
         print_with_time(f"❌ 获取流量信息失败: {str(e)}")
